@@ -29,12 +29,22 @@ public class ScumVMActivity extends Activity {
     
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
+    	if(keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || 
+    			keyCode == KeyEvent.KEYCODE_VOLUME_UP || 
+    			keyCode == KeyEvent.KEYCODE_MENU) {
+	    	return false;
+    	}
     	mView.processEvent(event);
     	return true;
     }
     
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
+    	if(keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || 
+    			keyCode == KeyEvent.KEYCODE_VOLUME_UP || 
+    			keyCode == KeyEvent.KEYCODE_MENU) {	
+    		return false;
+    	}
     	mView.processEvent(event);
     	return true;
     }
