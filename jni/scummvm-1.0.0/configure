@@ -1,0 +1,2285 @@
+#!/bin/sh
+#
+# configure -- custom configure script for ScummVM.
+#
+# ScummVM is the legal property of its developers, whose names
+# are too numerous to list here. Please refer to the COPYRIGHT
+# file distributed with this source distribution.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+#
+# $URL: https://scummvm.svn.sourceforge.net/svnroot/scummvm/scummvm/trunk/base/main.cpp $
+# $Id: configure 45687 2009-11-05 13:51:32Z djwillis $
+
+# Save the current environment variables for next runs
+SAVED_CONFIGFLAGS=$@
+SAVED_LDFLAGS=$LDFLAGS
+SAVED_CXX=$CXX
+SAVED_CXXFLAGS=$CXXFLAGS
+SAVED_CPPFLAGS=$CPPFLAGS
+SAVED_ASFLAGS=$ASFLAGS
+
+# Use environment vars if set
+CXXFLAGS="$CXXFLAGS $CPPFLAGS"
+
+# Backslashes into forward slashes:
+# The following OS/2 specific code is performed to deal with handling of backslashes by ksh.
+# Borrowed from the Sane configure script
+
+if test "$ac_emxsupport" != "no" -a "$ac_emxsupport" != "NO"; then
+	ac_save_IFS="$IFS"
+	IFS="\\"
+	ac_TEMP_PATH=
+	for ac_dir in $PATH; do
+		IFS=$ac_save_IFS
+		if test -z "$ac_TEMP_PATH"; then
+			ac_TEMP_PATH="$ac_dir"
+		else
+			ac_TEMP_PATH="$ac_TEMP_PATH/$ac_dir"
+		fi
+	done
+	PATH="$ac_TEMP_PATH"
+	export PATH
+	unset ac_TEMP_PATH
+fi
+
+
+# Add an engine: id name build subengines
+add_engine() {
+	_engines="${_engines} ${1}"
+	eval _engine_${1}_name='${2}'
+	eval _engine_${1}_build='${3}'
+	eval _engine_${1}_subengines='${4}'
+	for sub in ${4}; do
+		eval _engine_${sub}_sub=yes
+	done
+}
+
+add_engine scumm "SCUMM" yes "scumm_7_8 he"
+add_engine scumm_7_8 "v7 & v8 games" yes
+add_engine he "HE71+ games" yes
+add_engine agi "AGI" yes
+add_engine agos "AGOS" yes "pn agos2"
+add_engine pn "Personal Nightmare" no
+add_engine agos2 "AGOS 2 games" yes
+add_engine cine "Cinematique evo 1" yes
+add_engine cruise "Cinematique evo 2" yes
+add_engine drascula "Drascula: The Vampire Strikes Back" yes
+add_engine gob "Gobli*ns" yes
+add_engine groovie "Groovie" yes
+add_engine igor "Igor: Objective Uikokahonia" no
+add_engine kyra "Legend of Kyrandia" yes "lol"
+add_engine lol "Lands of Lore" no
+add_engine lure "Lure of the Temptress" yes
+add_engine m4 "M4/MADS" no
+add_engine made "MADE" yes
+add_engine parallaction "Parallaction" yes
+add_engine queen "Flight of the Amazon Queen" yes
+add_engine saga "SAGA" yes "ihnm saga2"
+add_engine ihnm "IHNM" yes
+add_engine saga2 "SAGA 2 games" no
+add_engine sci "SCI" no "sci32"
+add_engine sci32 "SCI32 games" no
+add_engine sky "Beneath a Steel Sky" yes
+add_engine sword1 "Broken Sword 1" yes
+add_engine sword2 "Broken Sword 2" yes
+add_engine tinsel "Tinsel" yes
+add_engine touche "Touche: The Adventures of the Fifth Musketeer" yes
+add_engine tucker "Bud Tucker in Double Trouble" yes
+
+
+#
+# Default settings
+#
+# Default lib behaviour yes/no/auto
+_vorbis=auto
+_tremor=auto
+_flac=auto
+_mad=auto
+_alsa=auto
+_zlib=auto
+_mpeg2=no
+_fluidsynth=auto
+_mt32emu=yes
+# Default option behaviour yes/no
+_build_hq_scalers=yes
+_build_scalers=yes
+_indeo3=auto
+# Default vkeybd/keymapper options
+_vkeybd=no
+_keymapper=no
+# Default platform settings
+_backend=sdl
+_endian=unknown
+_need_memalign=no
+_have_x86=no
+_dynamic_modules=no
+_plugins_default=static
+_nasm=auto
+# Default commands
+_ranlib=ranlib
+_strip=strip
+_ar="ar cru"
+_as="as"
+_windres=windres
+_win32path="C:/scummvm"
+_aos4path="Games:ScummVM"
+_staticlibpath=/sw
+_sdlconfig=sdl-config
+_sdlpath="$PATH"
+_nasmpath="$PATH"
+NASMFLAGS=""
+NASM=""
+_prefix=/usr/local
+# For cross compiling
+_host=""
+_host_cpu=""
+_host_vendor=""
+_host_os=""
+_host_alias=""
+
+_srcdir=`dirname $0`
+
+# Determine a tmp file name, using mktemp(1) when available.
+if type mktemp > /dev/null 2>&1 ; then
+	TMPO=`mktemp /tmp/scummvm-conf.XXXXXXXXXX`
+else
+	TMPO=./scummvm-conf
+fi
+TMPC=${TMPO}.cpp
+TMPLOG=config.log
+
+cc_check() {
+	echo >> "$TMPLOG"
+	cat "$TMPC" >> "$TMPLOG"
+	echo >> "$TMPLOG"
+	echo "$CXX $TMPC -o $TMPO$HOSTEXEEXT $@" >> "$TMPLOG"
+	rm -f "$TMPO$HOSTEXEEXT"
+	( $CXX $CXXFLAGS "$TMPC" -o "$TMPO$HOSTEXEEXT" "$@" ) >> "$TMPLOG" 2>&1
+	TMP="$?"
+	echo >> "$TMPLOG"
+	return "$TMP"
+}
+
+#
+# Function to provide echo -n for bourne shells that don't have it
+#
+echo_n() {
+	printf "$@"
+}
+
+echocheck() {
+	echo_n "Checking for $@... "
+}
+
+# Add a line of data to config.mk.
+add_line_to_config_mk() {
+	_config_mk_data="$_config_mk_data"'
+'"$1"
+}
+
+# Add a line of data to config.h.
+add_line_to_config_h() {
+	_config_h_data="$_config_h_data"'
+'"$1"
+}
+
+add_to_config_h_if_yes() {
+	if test "$1" = yes ; then
+		add_line_to_config_h "$2"
+	else
+		add_line_to_config_h "/* $2 */"
+	fi
+}
+
+# Conditionally add a line of data to config.mk. Takes two parameters:
+# The first one can be set to 'no' to "comment out" the line, i.e.
+# make it ineffective, use 'yes' otherwise.
+# The second param is the line to insert.
+add_to_config_mk_if_yes() {
+	if test "$1" = yes ; then
+		add_line_to_config_mk "$2"
+	else
+		add_line_to_config_mk "# $2"
+	fi
+}
+
+# Conditionally add a line of data to config.mk. Takes two parameters:
+# The first one can be set to 'yes' to "comment out" the line, i.e.
+# make it ineffective, use 'no' otherwise.
+# The second param is the line to insert.
+add_to_config_mk_if_no() {
+	if test "$1" = no ; then
+		add_line_to_config_mk "$2"
+	else
+		add_line_to_config_mk "# $2"
+	fi
+}
+
+#
+# Determine sdl-config
+#
+# TODO: small bit of code to test sdl useability
+find_sdlconfig() {
+	echo_n "Looking for sdl-config... "
+	sdlconfigs="$_sdlconfig:sdl-config:sdl11-config:sdl12-config"
+	_sdlconfig=
+
+	IFS="${IFS=   }"; ac_save_ifs="$IFS"; IFS="$SEPARATOR"
+	for path_dir in $_sdlpath; do
+		#reset separator to parse sdlconfigs
+		IFS=":"
+		for sdlconfig in $sdlconfigs; do
+			if test -f "$path_dir/$sdlconfig" ; then
+				_sdlconfig="$path_dir/$sdlconfig"
+				echo $_sdlconfig
+				# Save the prefix
+				_sdlpath=$path_dir
+				if test `basename $path_dir` = bin ; then
+					_sdlpath=`dirname $path_dir`
+				fi
+				# break at first sdl-config found in path
+				break 2
+			fi
+		done
+	done
+
+	IFS="$ac_save_ifs"
+
+	if test -z "$_sdlconfig"; then
+		echo "none found!"
+		exit 1
+	fi
+}
+
+#
+# Determine extension used for executables
+#
+get_system_exe_extension() {
+	case $1 in
+	mingw* | *os2-emx | wince)
+		_exeext=".exe"
+		;;
+	arm-riscos)
+		_exeext=",ff8"
+		;;
+	gp2xwiz-linux)
+		_exeext=".wiz"
+		;;	
+	gp2x-linux)
+		_exeext=".gp2x"
+		;;	
+	dreamcast | wii | gamecube | psp)
+		_exeext=".elf"
+		;;
+	*)
+		_exeext=""
+		;;
+	esac
+}
+
+#
+# Generic options functions
+#
+
+# Show the configure help line for an option
+option_help() {
+	tmpopt=`echo $1 | sed 's/_/-/g'`
+	option=`echo "--${tmpopt}                       " | sed "s/\(.\{23\}\).*/\1/"`
+	echo "  ${option}  ${2}"
+}
+
+# Show an error about an unknown option
+option_error() {
+	echo "error: unrecognised option: $ac_option
+Try \`$0 --help' for more information." >&2
+	exit 1
+}
+
+
+#
+# Engine handling functions
+#
+
+# Get the name of the engine
+get_engine_name() {
+	eval echo \$_engine_$1_name
+}
+
+# Will this engine be built?
+get_engine_build() {
+	eval echo \$_engine_$1_build
+}
+
+# Get the subengines
+get_engine_subengines() {
+	eval echo \$_engine_$1_subengines
+}
+
+# Ask if this is a subengine
+get_engine_sub() {
+	sub=`eval echo \\$_engine_$1_sub`
+	if test -z "$sub" ; then
+		sub=no
+	fi
+	echo $sub
+}
+
+# Enable *all* engines
+engine_enable_all() {
+	for engine in $_engines; do
+		eval _engine_${engine}_build=yes
+	done
+}
+
+# Disable *all* engines
+engine_disable_all() {
+	for engine in $_engines; do
+		eval _engine_${engine}_build=no
+	done
+}
+
+# Enable the given engine
+engine_enable() {
+	# Get the parameter
+	if ( echo $1 | grep '=' ) 2> /dev/null > /dev/null ; then
+		eng=`echo $1 | cut -d '=' -f 1`
+		opt=`echo $1 | cut -d '=' -f 2`
+	else
+		eng=$1
+		opt=yes
+	fi
+	engine=`echo $eng | sed 's/-/_/g'`
+
+	# Filter the parameter for the subengines
+	if test "`get_engine_sub ${engine}`" != "no" -a "$opt" != "yes" ; then
+		option_error
+		return
+	fi
+
+	if test "$opt" = "static" -o "$opt" = "dynamic" -o "$opt" = "yes" ; then
+		if test "`get_engine_name ${engine}`" != "" ; then
+			eval _engine_${engine}_build=$opt
+		else
+			option_error
+		fi
+	else
+		option_error
+	fi
+}
+
+# Disable the given engine
+engine_disable() {
+	# Filter malformed options
+	if ( echo $1 | grep '=' ) 2> /dev/null > /dev/null ; then
+		option_error
+		return
+	fi
+
+	engine=`echo $1 | sed 's/-/_/g'`
+	if test "`get_engine_name ${engine}`" != "" ; then
+		eval _engine_${engine}_build=no
+	else
+		option_error
+	fi
+}
+
+# Show the configure help line for a given engine
+show_engine_help() {
+	if test `get_engine_build $1` = yes ; then
+		option="disable"
+		do="don't "
+	else
+		option="enable"
+		do=""
+	fi
+	name=`get_engine_name $1`
+	option_help ${option}-${1} "${do}build the ${name} engine"
+	for sub in `get_engine_subengines $1`; do
+		show_subengine_help $sub $1
+	done
+}
+
+# Show the configure help line for a given subengine
+show_subengine_help() {
+	if test `get_engine_build $1` = yes ; then
+		option="disable"
+		do="exclude"
+	else
+		option="enable"
+		do="include"
+	fi
+	name=`get_engine_name $1`
+	parent=`get_engine_name $2`
+	option_help ${option}-${1} "${do} the ${name} in ${parent} engine"
+}
+
+# Prepare the strings about the engines to build
+prepare_engine_build_strings() {
+	string=`get_engine_build_string $1 static`
+	if test -n "$string" ; then
+		_engines_built_static="${_engines_built_static}#$string@"
+	fi
+
+	string=`get_engine_build_string $1 dynamic`
+	if test -n "$string" ; then
+		_engines_built_dynamic="${_engines_built_dynamic}#$string@"
+	fi
+
+	string=`get_engine_build_string $1 no`
+	if test -n "$string" ; then
+		_engines_skipped="${_engines_skipped}#$string@"
+	fi
+}
+
+# Get the string about building an engine
+get_engine_build_string() {
+	engine_string=""
+	engine_build=`get_engine_build $1`
+	show=no
+
+	# Check if the current engine should be shown for the current status
+	if test $engine_build = $2 ; then
+		show=yes
+	else
+		# Test for disabled sub-engines
+		if test $2 = no ; then
+			for subeng in `get_engine_subengines $1` ; do
+				if test `get_engine_build $subeng` = no ; then
+					engine_build=no
+					show=yes
+				fi
+			done
+		fi
+	fi
+
+	# Convert static/dynamic to yes to ease the check of subengines
+	if test $engine_build != no ; then
+		engine_build=yes
+	fi
+
+	# The engine should be shown, build the string
+	if test $show = yes ; then
+		build_string_func=get_${1}_build_string
+		if ( type $build_string_func | grep function ) 2> /dev/null > /dev/null ; then
+			engine_string=`$build_string_func $1 $engine_build`
+		else
+			engine_string=`get_subengines_build_string $1 $engine_build`
+		fi
+
+		engine_string="`get_engine_name $1` $engine_string"
+	fi
+
+	echo $engine_string
+}
+
+# Get the string about building subengines
+get_subengines_build_string() {
+	all=yes
+	subengine_string=$3
+	for subeng in `get_engine_subengines $1` ; do
+		if test `get_engine_build $subeng` = $2 ; then
+			subengine_string="$subengine_string [`get_engine_name $subeng`]"
+		else
+			all=no
+		fi
+	done
+	if test $2 != no ; then
+		if test -n "$subengine_string" ; then
+			if test $all = yes ; then
+				subengine_string="[all games]"
+			fi
+		fi
+	fi
+
+	echo $subengine_string
+}
+
+# Engine specific build strings
+get_scumm_build_string() {
+	if test `get_engine_build $1` != no ; then
+		if test $2 != no ; then
+			base="[v0-v6 games]"
+		fi
+		get_subengines_build_string $1 $2 "$base"
+	fi
+}
+
+get_saga_build_string() {
+	if test `get_engine_build $1` != no ; then
+		if test $2 != no ; then
+			base="[ITE]"
+		fi
+		get_subengines_build_string $1 $2 "$base"
+	fi
+}
+
+#
+# Greet user
+#
+echo "Running ScummVM configure..."
+echo "Configure run on" `date` > $TMPLOG
+
+#
+# Check any parameters we received
+#
+# TODO:
+# * Change --disable-mad / --enable-mad to the way it's done in autoconf:
+#  That is, --without-mad / --with-mad=/prefix/to/mad. Useful for people
+#  who have Mad/Vorbis/ALSA installed in a non-standard locations.
+#
+
+for parm in "$@" ; do
+	if test "$parm" = "--help" || test "$parm" = "-help" || test "$parm" = "-h" ; then
+		for engine in $_engines; do
+			if test `get_engine_sub $engine` = no ; then
+				engines_help="$engines_help`show_engine_help $engine`
+"
+			fi
+		done
+		cat << EOF
+
+Usage: $0 [OPTIONS]...
+
+Configuration:
+  -h, --help             display this help and exit
+  --backend=BACKEND      backend to build (sdl, morphos, dc, gp2x, gp2xwiz, iphone, wince, wii, psp, linuxmoto, null) [sdl]
+
+Installation directories:
+  --prefix=DIR           use this prefix for installing ScummVM [/usr/local]
+  --bindir=DIR           directory to install the scummvm binary in [PREFIX/bin]
+  --mandir=DIR           directory to install the manpage in [PREFIX/share/man]
+  --datadir=DIR          directory to install the data files in [PREFIX/share]
+  --libdir=DIR           directory to install the plugins in [PREFIX/lib]
+
+Special configuration feature:
+  --host=HOST            cross-compile to target HOST (arm-linux, ...)
+                         special targets: linupy for Yopy PDA
+                                          dreamcast for Sega Dreamcast
+                                          wii for Nintendo Wii
+                                          gamecube for Nintendo Gamecube
+                                          iphone for Apple iPhone
+                                          wince for Windows CE
+                                          psp for PlayStation Portable 
+
+Optional Features:
+  --disable-debug          disable building with debugging symbols
+  --enable-Werror          treat warnings as errors
+  --enable-all-engines     enable all engines
+  --disable-all-engines    disable all engines
+$engines_help
+  --enable-plugins         enable the support for dynamic plugins
+  --default-dynamic        make plugins dynamic by default
+  --disable-mt32emu        don't enable the integrated MT-32 emulator
+  --disable-hq-scalers     exclude HQ2x and HQ3x scalers
+  --disable-scalers        exclude scalers
+
+Optional Libraries:
+  --with-alsa-prefix=DIR   Prefix where alsa is installed (optional)
+  --disable-alsa           disable ALSA midi sound support [autodetect]
+
+  --with-ogg-prefix=DIR    Prefix where libogg is installed (optional)
+  --with-vorbis-prefix=DIR Prefix where libvorbis is installed (optional)
+  --disable-vorbis         disable Ogg Vorbis support [autodetect]
+
+  --with-tremor-prefix=DIR Prefix where tremor is installed (optional)
+  --disable-tremor         disable tremor support [autodetect]
+
+  --with-mad-prefix=DIR    Prefix where libmad is installed (optional)
+  --disable-mad            disable libmad (MP3) support [autodetect]
+
+  --with-flac-prefix=DIR   Prefix where libFLAC is installed (optional)
+  --disable-flac           disable FLAC support [autodetect]
+
+  --with-zlib-prefix=DIR   Prefix where zlib is installed (optional)
+  --disable-zlib           disable zlib (compression) support [autodetect]
+
+  --with-mpeg2-prefix=DIR  Prefix where libmpeg2 is installed (optional)
+  --enable-mpeg2           enable mpeg2 codec for cutscenes [no]
+
+  --disable-indeo3         disable Indeo3 decoder [autodetect]
+
+  --with-fluidsynth-prefix=DIR  Prefix where libfluidsynth is installed (optional)
+  --disable-fluidsynth     disable fluidsynth MIDI driver [autodetect]
+
+  --with-sdl-prefix=DIR    Prefix where the sdl-config script is installed (optional)
+
+  --with-nasm-prefix=DIR   Prefix where nasm executable is installed (optional)
+  --disable-nasm           disable assembly language optimizations [autodetect]
+
+Some influential environment variables:
+  LDFLAGS   linker flags, e.g. -L<lib dir> if you have libraries in a
+            nonstandard directory <lib dir>
+  CXX       C++ compiler command
+  CXXFLAGS  C++ compiler flags
+  CPPFLAGS  C++ preprocessor flags, e.g. -I<include dir> if you have
+            headers in a nonstandard directory <include dir>
+  ASFLAGS   assembler flags
+
+EOF
+		exit 0
+	fi
+done # for parm in ...
+
+DEBFLAGS="-g"
+
+for ac_option in $@; do
+	case "$ac_option" in
+	--disable-hq-scalers)     _build_hq_scalers=no ;;
+	--disable-scalers)        _build_scalers=no ;;
+	--enable-alsa)            _alsa=yes       ;;
+	--disable-alsa)           _alsa=no        ;;
+	--enable-vorbis)          _vorbis=yes     ;;
+	--disable-vorbis)         _vorbis=no      ;;
+	--enable-tremor)          _tremor=yes     ;;
+	--disable-tremor)         _tremor=no      ;;
+	--enable-flac)            _flac=yes       ;;
+	--disable-flac)           _flac=no        ;;
+	--enable-mad)             _mad=yes        ;;
+	--disable-mad)            _mad=no         ;;
+	--enable-zlib)            _zlib=yes       ;;
+	--disable-zlib)           _zlib=no        ;;
+	--enable-nasm)            _nasm=yes       ;;
+	--disable-nasm)           _nasm=no        ;;
+	--enable-mpeg2)           _mpeg2=yes      ;;
+	--disable-indeo3)         _indeo3=no      ;;
+	--enable-indeo3)          _indeo3=yes     ;;
+	--disable-fluidsynth)     _fluidsynth=no  ;;
+	--enable-plugins)         _dynamic_modules=yes ;;
+	--default-dynamic)        _plugins_default=dynamic ;;
+	--enable-mt32emu)         _mt32emu=yes    ;;
+	--disable-mt32emu)        _mt32emu=no     ;;
+	--enable-vkeybd)          _vkeybd=yes     ;;
+	--disable-vkeybd)         _vkeybd=no      ;;
+	--enable-keymapper)       _keymapper=yes  ;;
+	--disable-keymapper)      _keymapper=no   ;;
+	--with-fluidsynth-prefix=*)
+		arg=`echo $ac_option | cut -d '=' -f 2`
+		FLUIDSYNTH_CFLAGS="-I$arg/include"
+		FLUIDSYNTH_LIBS="-L$arg/lib"
+		;;
+	--with-mpeg2-prefix=*)
+		arg=`echo $ac_option | cut -d '=' -f 2`
+		MPEG2_CFLAGS="-I$arg/include"
+		MPEG2_LIBS="-L$arg/lib"
+		;;
+	--with-alsa-prefix=*)
+		arg=`echo $ac_option | cut -d '=' -f 2`
+		ALSA_CFLAGS="-I$arg/include"
+		ALSA_LIBS="-L$arg/lib"
+		;;
+	--with-ogg-prefix=*)
+		arg=`echo $ac_option | cut -d '=' -f 2`
+		OGG_CFLAGS="-I$arg/include"
+		OGG_LIBS="-L$arg/lib"
+		;;
+	--with-vorbis-prefix=*)
+		arg=`echo $ac_option | cut -d '=' -f 2`
+		VORBIS_CFLAGS="-I$arg/include"
+		VORBIS_LIBS="-L$arg/lib"
+		;;
+	--with-tremor-prefix=*)
+		arg=`echo $ac_option | cut -d '=' -f 2`
+		TREMOR_CFLAGS="-I$arg/include"
+		TREMOR_LIBS="-L$arg/lib"
+		;;
+	--with-flac-prefix=*)
+		arg=`echo $ac_option | cut -d '=' -f 2`
+		FLAC_CFLAGS="-I$arg/include"
+		FLAC_LIBS="-L$arg/lib"
+		;;
+	--with-mad-prefix=*)
+		arg=`echo $ac_option | cut -d '=' -f 2`
+		MAD_CFLAGS="-I$arg/include"
+		MAD_LIBS="-L$arg/lib"
+		;;
+	--with-zlib-prefix=*)
+		arg=`echo $ac_option | cut -d '=' -f 2`
+		ZLIB_CFLAGS="-I$arg/include"
+		ZLIB_LIBS="-L$arg/lib"
+		;;
+	--backend=*)
+		_backend=`echo $ac_option | cut -d '=' -f 2`
+		;;
+	--enable-debug)
+		# debug is enabled by default
+		;;
+	--disable-debug)
+		DEBFLAGS=""
+		;;
+	--enable-Werror)
+		CXXFLAGS="$CXXFLAGS -Werror"
+		;;
+	--enable-release)
+		DEBFLAGS="-O2 -Wuninitialized"
+		;;
+	--enable-profiling)
+		CXXFLAGS="$CXXFLAGS -pg"
+		LDFLAGS="$LDFLAGS -pg"
+		;;
+	--with-sdl-prefix=*)
+		arg=`echo $ac_option | cut -d '=' -f 2`
+		_sdlpath="$arg:$arg/bin"
+		;;
+	--with-nasm-prefix=*)
+		arg=`echo $ac_option | cut -d '=' -f 2`
+		_nasmpath="$arg:$arg/bin"
+		;;
+	--with-staticlib-prefix=*)
+		_staticlibpath=`echo $ac_option | cut -d '=' -f 2`
+		;;
+	--host=*)
+		_host=`echo $ac_option | cut -d '=' -f 2`
+		;;
+	--prefix=*)
+		_prefix=`echo $ac_option | cut -d '=' -f 2`
+		;;
+	--bindir=*)
+		_bindir=`echo $ac_option | cut -d '=' -f 2`
+		;;
+	--mandir=*)
+		_mandir=`echo $ac_option | cut -d '=' -f 2`
+		;;
+	--datadir=*)
+		_datadir=`echo $ac_option | cut -d '=' -f 2`
+		;;
+	--libdir=*)
+		_libdir=`echo $ac_option | cut -d '=' -f 2`
+		;;
+	--enable-all-engines)
+		engine_enable_all
+		;;
+	--disable-all-engines)
+		engine_disable_all
+		;;
+	--enable-*)
+		engine_enable `echo $ac_option | cut -d '-' -f 4-`
+		;;
+	--disable-*)
+		engine_disable `echo $ac_option | cut -d '-' -f 4-`
+		;;
+	*)
+		option_error
+		;;
+	esac;
+done;
+
+CXXFLAGS="$CXXFLAGS $DEBFLAGS"
+
+guessed_host=`$_srcdir/config.guess`
+get_system_exe_extension $guessed_host
+NATIVEEXEEXT=$_exeext
+
+case $_host in
+linupy)
+	_host_os=linux
+	_host_cpu=arm
+	;;
+motoezx)
+	_host_os=linux
+	_host_cpu=arm
+	_host_alias=arm-linux-gnu
+	;;
+motomagx)
+	_host_os=linux
+	_host_cpu=arm
+	_host_alias=arm-linux-gnueabi
+	;;
+arm-riscos)
+	_host_os=riscos
+	_host_cpu=arm
+	;;
+ppc-amigaos)
+	_host_os=amigaos
+	_host_cpu=ppc
+	;;
+gp2xwiz)
+	_host_os=gp2xwiz-linux
+	_host_cpu=arm
+	_host_alias=arm-open2x-linux
+	;;	
+gp2x)
+	_host_os=gp2x-linux
+	_host_cpu=arm
+	_host_alias=arm-open2x-linux
+	;;
+i586-mingw32msvc)
+	_host_os=mingw32msvc
+	_host_cpu=i586
+	;;
+iphone)
+	_host_os=iphone
+	_host_cpu=arm
+	_host_alias=arm-apple-darwin9
+	;;
+wince)
+	_host_os=wince
+	_host_cpu=arm
+	_host_alias=arm-wince-mingw32ce
+	;;
+neuros)
+	_host_os=linux
+	_host_cpu=arm
+	;;
+dreamcast)
+	_host_os=dreamcast
+	_host_cpu=sh
+	_host_alias=sh-elf
+	CXXFLAGS="$CXXFLAGS -ml -m4-single-only"
+	LDFLAGS="$LDFLAGS -ml -m4-single-only"
+	;;
+wii)
+	_host_os=wii
+	_host_cpu=ppc
+	_host_alias=powerpc-gekko
+	;;
+psp)
+	_host_os=psp
+	_host_cpu=mipsallegrexel
+	_host_alias=psp
+	LDFLAGS="$LDFLAGS -L$PSPDEV/psp/sdk/lib -specs=$_srcdir/backends/platform/psp/psp.spec"
+	;;
+gamecube)
+	_host_os=gamecube
+	_host_cpu=ppc
+	_host_alias=powerpc-gekko
+	;;
+*)
+	if test -n "$_host"; then
+		guessed_host=`$_srcdir/config.sub $_host`
+	fi
+	_host_cpu=`echo $guessed_host | sed 's/^\([^-]*\)-\([^-]*\)-\(.*\)$/\1/'`
+	_host_vendor=`echo $guessed_host | sed 's/^\([^-]*\)-\([^-]*\)-\(.*\)$/\2/'`
+	_host_os=`echo $guessed_host | sed 's/^\([^-]*\)-\([^-]*\)-\(.*\)$/\3/'`
+	;;
+esac
+
+if test -z "$_host_alias"; then
+	_host_alias="$_host_cpu-$_host_os"
+else
+	# if _host_alias was set, default to the standard GNU tools
+	_ranlib=$_host_alias-ranlib
+	_strip=$_host_alias-strip
+	_ar="$_host_alias-ar cru"
+	_as="$_host_alias-as"
+	_windres=$_host_alias-windres
+fi
+
+#
+# Determine extension used for executables
+#
+get_system_exe_extension $_host_os 
+HOSTEXEEXT=$_exeext
+
+#
+# Determine separator used for $PATH
+#
+case $_host_os in
+os2-emx* )
+	SEPARATOR=";"
+	;;
+* )
+	SEPARATOR=":"
+	;;
+esac
+
+#
+# Platform specific sanity checks
+#
+case $_host_os in
+wii | gamecube)
+	if test -z "$DEVKITPRO"; then
+		echo "Please set DEVKITPRO in your environment. export DEVKITPRO=<path to devkitPRO>"
+		exit 1
+	fi
+	;;
+psp)
+	if test -z "$PSPDEV"; then
+		echo "Please set PSPDEV in your environment. export PSPDEV=<path to psp toolchain>"
+		exit 1
+	fi
+	;;
+*)
+	;;
+esac
+
+#
+# Determine the C++ compiler
+#
+echo_n "Looking for C++ compiler... "
+
+# Check whether the given command is a working C++ compiler
+test_compiler() {
+	cat <<EOF >tmp_cxx_compiler.cpp
+	class Foo { int a; };
+	int main(int argc, char **argv) {
+		Foo *a = new Foo(); delete a; return 0;
+	}
+EOF
+
+	if test -n "$_host"; then
+		# In cross-compiling mode, we cannot run the result
+		eval "$1 $CXXFLAGS $LDFLAGS -o tmp_cxx_compiler$HOSTEXEEXT tmp_cxx_compiler.cpp" 2> /dev/null && rm -f tmp_cxx_compiler$HOSTEXEEXT tmp_cxx_compiler.cpp
+	else
+		eval "$1 $CXXFLAGS $LDFLAGS -o tmp_cxx_compiler$HOSTEXEEXT tmp_cxx_compiler.cpp" 2> /dev/null && eval "./tmp_cxx_compiler$HOSTEXEEXT 2> /dev/null" && rm -rf tmp_cxx_compiler$HOSTEXEEXT tmp_cxx_compiler.dSYM tmp_cxx_compiler.cpp
+	fi
+}
+
+# Prepare a list of candidates for the C++ compiler
+if test -n "$CXX" && test_compiler "$CXX"; then
+	# Use the compiler specified in CXX
+	echo $CXX
+else
+	if test -n "$_host"; then
+		compilers="$_host_alias-g++ $_host_alias-c++ $_host-g++ $_host-c++"
+	else
+		compilers="g++ c++"
+	fi
+
+	# Iterate over all candidates, pick the first working one
+	CXX=
+	for compiler in $compilers; do
+		if test_compiler $compiler; then
+			CXX=$compiler
+			echo $CXX
+			break
+		fi
+	done
+fi
+
+if test -z "$CXX"; then
+	echo "none found!"
+	exit 1
+fi
+
+#
+# Determine the compiler version
+#
+echocheck "compiler version"
+
+cxx_version=`( $CXX -dumpversion ) 2>&1`
+if test "$?" -gt 0; then
+	cxx_version="not found"
+fi
+
+case $cxx_version in
+	2.95.[2-9]|2.95.[2-9][-.]*|3.[0-9]|3.[0-9].[0-9]|3.[0-9].[0-9][-.]*|4.[0-9]|4.[0-9].[0-9]|4.[0-9].[0-9][-.]*)
+		_cxx_major=`echo $cxx_version | cut -d '.' -f 1`
+		_cxx_minor=`echo $cxx_version | cut -d '.' -f 2`
+		cxx_version="$cxx_version, ok"
+		cxx_verc_fail=no
+		;;
+	# whacky beos version strings
+	2.9-beos-991026*|2.9-beos-000224*)
+		_cxx_major=2
+		_cxx_minor=95
+		cxx_version="$cxx_version, ok"
+		cxx_verc_fail=no
+		;;
+	3_4)
+		_cxx_major=3
+		_cxx_minor=4
+		;;
+	'not found')
+		cxx_verc_fail=yes
+		;;
+	*)
+		cxx_version="$cxx_version, bad"
+		cxx_verc_fail=yes
+		;;
+esac
+
+echo "$cxx_version"
+
+if test "$cxx_verc_fail" = yes ; then
+	echo
+	echo "The version of your compiler is not supported at this time"
+	echo "Please ensure you are using GCC >= 2.95"
+	exit 1
+fi
+
+#
+# Check for endianness
+#
+echo_n "Checking endianness... "
+cat <<EOF >tmp_endianness_check.cpp
+short ascii_mm[] = { 0x4249, 0x4765, 0x6E44, 0x6961, 0x6E53, 0x7953, 0 };
+short ascii_ii[] = { 0x694C, 0x5454, 0x656C, 0x6E45, 0x6944, 0x6E61, 0 };
+void _ascii() { char* s = (char*) ascii_mm; s = (char*) ascii_ii; }
+short ebcdic_ii[] = { 0x89D3, 0xE3E3, 0x8593, 0x95C5, 0x89C4, 0x9581, 0 };
+short ebcdic_mm[] = { 0xC2C9, 0xC785, 0x95C4, 0x8981, 0x95E2, 0xA8E2, 0 };
+void _ebcdic() { char* s = (char*) ebcdic_mm; s = (char*) ebcdic_ii; }
+int main() { _ascii (); _ebcdic (); return 0; }
+EOF
+$CXX $CXXFLAGS -c -o tmp_endianness_check.o tmp_endianness_check.cpp
+if strings tmp_endianness_check.o | grep BIGenDianSyS >/dev/null; then
+	_endian=big
+else
+	_endian=little
+fi
+echo $_endian;
+rm -f tmp_endianness_check.o tmp_endianness_check.cpp
+
+#
+# Determine a data type with the given length
+#
+find_type_with_size() {
+	for datatype in int short char long unknown; do
+	cat <<EOF >tmp_find_type_with_size.cpp
+typedef $datatype ac__type_sizeof_;
+int main() {
+	static int test_array [1 - 2 * !(((long int) (sizeof (ac__type_sizeof_))) == $1)];
+	test_array [0] = 0;
+	return 0;
+}
+EOF
+	if $CXX $CXXFLAGS -c -o tmp_find_type_with_size$HOSTEXEEXT tmp_find_type_with_size.cpp 2>/dev/null ; then
+		break
+	else
+		if test "$datatype" = "unknown"; then
+			echo "couldn't find data type with $1 bytes"
+			exit 1
+		fi
+		continue
+	fi
+	done
+	rm -f tmp_find_type_with_size$HOSTEXEEXT tmp_find_type_with_size.cpp
+	echo $datatype
+}
+
+#
+# Determine data type sizes
+#
+echo_n "Type with 1 byte... "
+type_1_byte=`find_type_with_size 1`
+TMP="$?"
+echo "$type_1_byte"
+test $TMP -eq 0 || exit 1	# check exit code of subshell
+
+echo_n "Type with 2 bytes... "
+type_2_byte=`find_type_with_size 2`
+TMP="$?"
+echo "$type_2_byte"
+test $TMP -eq 0 || exit 1	# check exit code of subshell
+
+echo_n "Type with 4 bytes... "
+type_4_byte=`find_type_with_size 4`
+TMP="$?"
+echo "$type_4_byte"
+test $TMP -eq 0 || exit 1	# check exit code of subshell
+
+#
+# Check whether we can use x86 asm routines
+#
+echo_n "Compiling for x86... "
+case $_host_cpu in
+	i386|i486|i586|i686)
+		_have_x86=yes
+		;;
+	*)
+		_have_x86=no
+		;;
+esac
+echo "$_have_x86"
+
+#
+# Determine build settings
+#
+echo_n "Checking hosttype... "
+echo $_host_os
+case $_host_os in
+	linux* | uclinux* | openbsd* | netbsd* | bsd* | sunos* | hpux*)
+		DEFINES="$DEFINES -DUNIX"
+		;;
+	freebsd*)
+		DEFINES="$DEFINES -DUNIX"
+		LDFLAGS="$LDFLAGS -L/usr/local/lib"
+		CXXFLAGS="$CXXFLAGS -I/usr/local/include"
+		;;
+	beos*)
+		DEFINES="$DEFINES -DUNIX -DSYSTEM_NOT_SUPPORTING_D_TYPE"
+		# Needs -lbind -lsocket for the timidity MIDI driver
+		LDFLAGS="-L/boot/home/config/lib"
+		CFLAGS="-I/boot/home/config/include"
+		CXXFLAGS="$CXXFLAGS -fhuge-objects"
+		LIBS="$LIBS -lbind -lsocket"
+		type_1_byte='char'
+		type_2_byte='short'
+		type_4_byte='long'
+		;;
+	haiku*)
+		DEFINES="$DEFINES -DUNIX -DSYSTEM_NOT_SUPPORTING_D_TYPE"
+		# Needs -lnetwork for the timidity MIDI driver
+		LIBS="$LIBS -lnetwork"
+		CXXFLAGS="$CXXFLAGS -fhuge-objects"
+		type_1_byte='char'
+		type_2_byte='short'
+		type_4_byte='long'
+		;;
+	solaris*)
+		DEFINES="$DEFINES -DUNIX -DSOLARIS -DSYSTEM_NOT_SUPPORTING_D_TYPE"
+		# Needs -lbind -lsocket for the timidity MIDI driver
+		LIBS="$LIBS -lnsl -lsocket"
+		;;
+	irix*)
+		DEFINES="$DEFINES -DUNIX -DIRIX -DSYSTEM_NOT_SUPPORTING_D_TYPE"
+		LIBS="$LIBS -lmd "
+		_ranlib=:
+		;;
+	darwin*)
+		DEFINES="$DEFINES -DUNIX -DMACOSX"
+		LIBS="$LIBS -framework QuickTime -framework AudioUnit -framework AudioToolbox -framework Carbon -framework CoreMIDI"
+		;;
+	mingw*)
+		DEFINES="$DEFINES -DWIN32 -D__USE_MINGW_ANSI_STDIO=0"
+		LIBS="$LIBS -lmingw32 -lwinmm"
+		OBJS="$OBJS scummvmico.o"
+		;;
+	cygwin*)
+		echo ERROR: Cygwin building is not supported by ScummVM anymore. Consider using MinGW.
+		exit 0
+		;;
+	os2-emx*)
+		DEFINES="$DEFINES -DUNIX"
+		;;
+	mint*)
+		DEFINES="$DEFINES -DUNIX -DSYSTEM_NOT_SUPPORTING_D_TYPE"
+		;;
+	amigaos*)
+		CXXFLAGS="$CXXFLAGS -mcrt=newlib -mstrict-align -mcpu=750 -mtune=7400"
+		LDFLAGS="$LDFLAGS -mcrt=newlib -use-dynld -Lsobjs:"
+		type_1_byte='char'
+		type_2_byte='short'
+		type_4_byte='long'
+		;;
+	dreamcast)
+		DEFINES="$DEFINES -D__DC__ -DNONSTANDARD_PORT"
+		;;
+	wii)
+		CXXFLAGS="$CXXFLAGS -Os -mrvl -mcpu=750 -meabi -mhard-float"
+		CXXFLAGS="$CXXFLAGS -ffunction-sections -fdata-sections -fmodulo-sched"
+		CXXFLAGS="$CXXFLAGS -I$DEVKITPRO/libogc/include"
+		LDFLAGS="$LDFLAGS -mrvl -mcpu=750 -L$DEVKITPRO/libogc/lib/wii"
+		;;
+	gamecube)
+		CXXFLAGS="$CXXFLAGS -Os -mogc -mcpu=750 -meabi -mhard-float"
+		CXXFLAGS="$CXXFLAGS -ffunction-sections -fdata-sections -fmodulo-sched"
+		CXXFLAGS="$CXXFLAGS -I$DEVKITPRO/libogc/include"
+		LDFLAGS="$LDFLAGS -mogc -mcpu=750 -L$DEVKITPRO/libogc/lib/cube"
+		;;
+	psp)
+		CXXFLAGS="$CXXFLAGS -O3 -G0 -I$PSPDEV/psp/sdk/include -D_PSP_FW_VERSION=150"
+		;;
+	wince)
+		CXXFLAGS="$CXXFLAGS -O3 -march=armv4 -mtune=xscale -D_WIN32_WCE=300 -D__ARM__ -D_ARM_ -DUNICODE -DFPM_DEFAULT -DNONSTANDARD_PORT"
+		CXXFLAGS="$CXXFLAGS -DWIN32 -Dcdecl= -D__cdecl__= -Wno-multichar"
+		;;
+	# given this is a shell script assume some type of unix
+	*)
+		echo "WARNING: could not establish system type, assuming unix like"
+		DEFINES="$DEFINES -DUNIX"
+		;;
+esac
+
+if test -n "$_host"; then
+	# Cross-compiling mode - add your target here if needed
+	case "$_host" in
+		linupy|arm-riscos)
+			echo "Cross-compiling to $_host, forcing endianness, alignment and type sizes"
+			DEFINES="$DEFINES -DUNIX"
+			_endian=little
+			_need_memalign=yes
+			add_line_to_config_h "#define LINUPY"
+			type_1_byte='char'
+			type_2_byte='short'
+			type_4_byte='int'
+			;;
+		arm-linux|arm*-linux-gnueabi|arm-*-linux|*-angstrom-linux)
+			echo "Cross-compiling to $_host, forcing endianness, alignment and type sizes"
+			DEFINES="$DEFINES -DUNIX -DUSE_ARM_SMUSH_ASM"
+			#not true for all ARM systems, but the interesting ones are all LE. Most (if not all) BE arm devices don't have a screen
+			_endian=little
+			_need_memalign=yes
+			type_1_byte='char'
+			type_2_byte='short'
+			type_4_byte='int'
+			add_line_to_config_mk 'USE_ARM_SOUND_ASM = 1'
+			add_line_to_config_mk 'USE_ARM_SMUSH_ASM = 1'
+			;;
+		motoezx)
+			echo "Cross-compiling to $_host, forcing endianness, alignment and type sizes"
+			DEFINES="$DEFINES -DUNIX -DMOTOEZX -DUSE_ARM_SMUSH_ASM -DUSE_ARM_GFX_ASM -DUSE_ARM_SCALER_ASM -DUSE_ARM_COSTUME_ASM"
+			#not true for all ARM systems, but the interesting ones are all LE. Most (if not all) BE arm devices don't have a screen
+			ASFLAGS="$ASFLAGS -mfpu=vfp"
+			_endian=little
+			_need_memalign=yes
+			type_1_byte='char'
+			type_2_byte='short'
+			type_4_byte='int'
+			add_line_to_config_mk 'USE_ARM_SOUND_ASM = 1'
+			add_line_to_config_mk 'USE_ARM_SMUSH_ASM = 1'
+			add_line_to_config_mk 'USE_ARM_GFX_ASM = 1'
+			add_line_to_config_mk 'USE_ARM_COSTUME_ASM = 1'
+			add_line_to_config_mk 'USE_ARM_SCALER_ASM = 1'
+			_backend="linuxmoto"
+			;;
+		motomagx)
+			echo "Cross-compiling to $_host, forcing endianness, alignment and type sizes"
+			DEFINES="$DEFINES -DUNIX -DMOTOMAGX -DUSE_ARM_SMUSH_ASM -DUSE_ARM_GFX_ASM -DUSE_ARM_SCALER_ASM -DUSE_ARM_COSTUME_ASM"
+			#not true for all ARM systems, but the interesting ones are all LE. Most (if not all) BE arm devices don't have a screen
+			ASFLAGS="$ASFLAGS -mfpu=vfp"
+			_endian=little
+			_need_memalign=yes
+			type_1_byte='char'
+			type_2_byte='short'
+			type_4_byte='int'
+			add_line_to_config_mk 'USE_ARM_SOUND_ASM = 1'
+			add_line_to_config_mk 'USE_ARM_SMUSH_ASM = 1'
+			add_line_to_config_mk 'USE_ARM_GFX_ASM = 1'
+			add_line_to_config_mk 'USE_ARM_COSTUME_ASM = 1'
+			add_line_to_config_mk 'USE_ARM_SCALER_ASM = 1'
+			_backend="linuxmoto"
+			;;
+		bfin*)
+			_need_memalign=yes
+			;;
+		*darwin*)
+			_ranlib=$_host-ranlib
+			_strip=$_host-strip
+			;;
+		gp2xwiz)
+			echo "Cross-compiling to $_host, forcing endianness, alignment and type sizes"
+			DEFINES="$DEFINES -DUNIX -DGP2XWIZ -DNDEBUG -DUSE_ARM_SMUSH_ASM -DUSE_ARM_GFX_ASM -DUSE_ARM_SCALER_ASM -DUSE_ARM_COSTUME_ASM -DDISABLE_DOSBOX_OPL"
+			CXXFLAGS="$CXXFLAGS -mcpu=arm926ej-s -mtune=arm926ej-s"
+			ASFLAGS="$ASFLAGS -mfloat-abi=soft"
+			LDFLAGS="$LDFLAGS"
+			_endian=little
+			_need_memalign=yes
+			type_1_byte='char'
+			type_2_byte='short'
+			type_4_byte='int'
+			add_line_to_config_mk 'USE_ARM_SOUND_ASM = 1'
+			add_line_to_config_mk 'USE_ARM_SMUSH_ASM = 1'
+			add_line_to_config_mk 'USE_ARM_GFX_ASM = 1'
+			add_line_to_config_mk 'USE_ARM_SCALER_ASM = 1'
+			add_line_to_config_mk 'USE_ARM_COSTUME_ASM = 1'
+			_backend="gp2xwiz"
+			_build_hq_scalers="no"
+			_mt32emu="no"
+			;;	
+		gp2x)
+			echo "Cross-compiling to $_host, forcing endianness, alignment and type sizes"
+			DEFINES="$DEFINES -DUNIX -DGP2X -DNDEBUG -DUSE_ARM_SMUSH_ASM -DUSE_ARM_GFX_ASM -DUSE_ARM_SCALER_ASM -DUSE_ARM_COSTUME_ASM -DDISABLE_DOSBOX_OPL"
+			CXXFLAGS="$CXXFLAGS -march=armv4t"
+			ASFLAGS="$ASFLAGS -mfloat-abi=soft"
+			LDFLAGS="$LDFLAGS -static"
+			_endian=little
+			_need_memalign=yes
+			type_1_byte='char'
+			type_2_byte='short'
+			type_4_byte='int'
+			add_line_to_config_mk 'USE_ARM_SOUND_ASM = 1'
+			add_line_to_config_mk 'USE_ARM_SMUSH_ASM = 1'
+			add_line_to_config_mk 'USE_ARM_GFX_ASM = 1'
+			add_line_to_config_mk 'USE_ARM_SCALER_ASM = 1'
+			add_line_to_config_mk 'USE_ARM_COSTUME_ASM = 1'
+			_backend="gp2x"
+			_build_hq_scalers="no"
+			_mt32emu="no"
+			;;
+		neuros)
+			echo "Cross-compiling to $_host, forcing endianness, alignment and type sizes"
+			DEFINES="$DEFINES -DUNIX"
+			_endian=little
+			_need_memalign=yes
+			add_line_to_config_h "#define NEUROS"
+			type_1_byte='char'
+			type_2_byte='short'
+			type_4_byte='int'
+			_backend='null'
+			_build_hq_scalers="no"
+			_mt32emu="no"
+			;;
+		ppc-amigaos)
+			echo "Cross-compiling to $_host, forcing endianness, alignment and type sizes"
+			_endian=big
+			_need_memalign=yes
+			type_1_byte='char'
+			type_2_byte='short'
+			type_4_byte='long'
+			;;
+		m68k-atari-mint)
+			echo "Cross-compiling to $_host, forcing endianness, alignment and type sizes"
+			DEFINES="$DEFINES -DUNIX -DSYSTEM_NOT_SUPPORTING_D_TYPE"
+			_endian=big
+			_need_memalign=yes
+			type_1_byte='char'
+			type_2_byte='short'
+			type_4_byte='long'
+			_ranlib=m68k-atari-mint-ranlib
+			_ar="m68k-atari-mint-ar cru"
+			;;
+		*mingw32*)
+			echo "Cross-compiling to $_host, forcing endianness, alignment and type sizes"
+			_endian=little
+			type_1_byte='char'
+			type_2_byte='short'
+			type_4_byte='int'
+			_sdlconfig=$_host-sdl-config
+			_windres=$_host-windres
+			_ar="$_host-ar cru"
+			_ranlib=$_host-ranlib
+			;;
+		iphone)
+			echo "Cross-compiling to $_host, forcing endianness, alignment and type sizes"
+			DEFINES="$DEFINES -DIPHONE -DUNIX -DUSE_ARM_SMUSH_ASM"
+			_endian=little
+			_need_memalign=yes
+			type_1_byte='char'
+			type_2_byte='short'
+			type_4_byte='int'
+			add_line_to_config_mk 'USE_ARM_SOUND_ASM = 1'
+			add_line_to_config_mk 'USE_ARM_SMUSH_ASM = 1'
+			_backend="iphone"
+			_build_hq_scalers="no"
+			;;
+		wince)
+			echo "Cross-compiling to $_host, forcing endianness, alignment and type sizes"
+			LDFLAGS="$LDFLAGS -Wl,-Map,scummvm.exe.map -Wl,--stack,65536"
+			_endian=little
+			_need_memalign=yes
+			type_1_byte='char'
+			type_2_byte='short'
+			type_4_byte='int'
+			add_line_to_config_mk 'USE_TREMOLO = 1'
+			add_line_to_config_mk 'USE_ARM_SOUND_ASM = 1'
+			add_line_to_config_mk 'USE_ARM_SMUSH_ASM = 1'
+			add_line_to_config_mk 'USE_ARM_GFX_ASM = 1'
+			add_line_to_config_mk 'USE_ARM_COSTUME_ASM = 1'
+			add_line_to_config_mk 'USE_ARM_SCALER_ASM = 1'
+			_backend="wince"
+			_mt32emu="no"
+			add_line_to_config_mk 'include $(srcdir)/backends/platform/wince/wince.mk'
+			;;
+		dreamcast)
+			echo "Cross-compiling to $_host, forcing endianness, alignment and type sizes"
+			DEFINES="$DEFINES -DDISABLE_DEFAULT_SAVEFILEMANAGER -DDISABLE_TEXT_CONSOLE -DDISABLE_COMMAND_LINE -DNOSERIAL"
+			CXXFLAGS="$CXXFLAGS -O3 -Wno-multichar -funroll-loops -fschedule-insns2 -fomit-frame-pointer -fdelete-null-pointer-checks -fno-exceptions"
+			_endian=little
+			_need_memalign=yes
+			type_1_byte='char'
+			type_2_byte='short'
+			type_4_byte='int'
+			_backend="dc"
+			_build_scalers="no"
+			_build_hq_scalers="no"
+			_mad="yes"
+			_zlib="yes"
+			add_line_to_config_mk 'include $(srcdir)/backends/platform/dc/dreamcast.mk'
+			;;
+		wii)
+			echo "Cross-compiling to $_host, forcing endianness, alignment and type sizes"
+			_endian=big
+			_need_memalign=yes
+			type_1_byte='char'
+			type_2_byte='short'
+			type_4_byte='int'
+			_backend="wii"
+			_build_hq_scalers="no"
+			add_line_to_config_mk 'GAMECUBE = 0'
+			add_line_to_config_mk 'include $(srcdir)/backends/platform/wii/wii.mk'
+			add_line_to_config_h "#define DEBUG_WII_USBGECKO"
+			add_line_to_config_h "/* #define DEBUG_WII_MEMSTATS */"
+			add_line_to_config_h "/* #define DEBUG_WII_GDB */"
+			add_line_to_config_h "#define USE_WII_DI"
+			add_line_to_config_h "#define USE_WII_KBD"
+			;;
+		gamecube)
+			echo "Cross-compiling to $_host, forcing endianness, alignment and type sizes"
+			_endian=big
+			_need_memalign=yes
+			type_1_byte='char'
+			type_2_byte='short'
+			type_4_byte='int'
+			_backend="wii"
+			_build_hq_scalers="no"
+			_mt32emu="no"
+			add_line_to_config_mk 'GAMECUBE = 1'
+			add_line_to_config_mk 'include $(srcdir)/backends/platform/wii/wii.mk'
+			add_line_to_config_h '#define GAMECUBE'
+			add_line_to_config_h "/* #define DEBUG_WII_USBGECKO */"
+			add_line_to_config_h "/* #define DEBUG_WII_MEMSTATS */"
+			add_line_to_config_h "/* #define DEBUG_WII_GDB */"
+			;;
+		psp)
+			echo "Cross-compiling to $_host, forcing endianness, alignment and type sizes"
+			_endian=little
+			_need_memalign=yes
+			type_1_byte='char'
+			type_2_byte='short'
+			type_4_byte='int'
+			_backend="psp"
+			_build_scalers="no"
+			_build_hq_scalers="no"
+			_mt32emu="no"
+			add_line_to_config_mk 'include $(srcdir)/backends/platform/psp/psp.mk'
+			;;
+		*)
+			echo "Continuing with auto-detected values ... if you have problems, please add your target to configure."
+			;;
+	esac
+
+else
+	#
+	# Check whether memory alignment is required
+	#
+	echo_n "Alignment required... "
+	case $_host_cpu in
+		arm*)
+			_need_memalign=yes
+			;;
+		alpha*)
+			# Hardcode alignment requirements for Alpha processsors
+			_need_memalign=yes
+			;;
+		sh*)
+			# Hardcode alignment requirements for SH processsors.
+			# While these can emulate unaligned memory access, this
+			# emulation is rather slow.
+			_need_memalign=yes
+			;;
+		mips*)
+			# Hardcode alignment requirements for MIPS processsors.
+			# While these can emulate unaligned memory access, this
+			# emulation is rather slow.
+			_need_memalign=yes
+			;;
+		*)
+			# Try to auto-detect....
+			cat > $TMPC << EOF
+#include <stdlib.h>
+#include <signal.h>
+int main(int argc, char **argv) {
+	unsigned char test[8] = { 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88 };
+	signal(SIGBUS, exit);
+	signal(SIGABRT, exit);
+	signal(SIGSEGV, exit);
+	if (*((unsigned int *)(test + 1)) != 0x55443322 && *((unsigned int *)(test + 1)) != 0x22334455) {
+		return 1;
+	}
+	return 0;
+}
+EOF
+			_need_memalign=yes
+			cc_check && $TMPO$HOSTEXEEXT && _need_memalign=no
+			;;
+	esac
+	echo "$_need_memalign"
+fi
+
+#
+# Add the results of the above checks to config.h
+#
+case $_endian in
+	big)
+		add_line_to_config_h '/* #define SCUMM_LITTLE_ENDIAN */'
+		add_line_to_config_h '#define SCUMM_BIG_ENDIAN'
+		;;
+	little)
+		add_line_to_config_h '#define SCUMM_LITTLE_ENDIAN'
+		add_line_to_config_h '/* #define SCUMM_BIG_ENDIAN */'
+		;;
+	*)
+		exit 1
+		;;
+esac
+
+add_to_config_h_if_yes $_have_x86 '#define HAVE_X86'
+
+add_to_config_h_if_yes $_need_memalign '#define SCUMM_NEED_ALIGNMENT'
+
+
+#
+# Check whether plugin support is requested and possible
+#
+echo_n "Checking whether building plugins was requested... "
+echo "$_dynamic_modules"
+_mak_plugins=
+_def_plugin="/* -> plugins disabled */"
+
+if test "$_dynamic_modules" = yes ; then
+	echo_n "Checking whether building plugins is supported... "
+	case $_host_os in
+	linux*)
+_def_plugin='
+#define PLUGIN_PREFIX	"lib"
+#define PLUGIN_SUFFIX	".so"
+'
+_mak_plugins='
+DYNAMIC_MODULES := 1
+PLUGIN_PREFIX := lib
+PLUGIN_SUFFIX := .so
+PLUGIN_EXTRA_DEPS =
+CXXFLAGS        += -DDYNAMIC_MODULES
+CXXFLAGS        += -fpic
+PLUGIN_LDFLAGS  += -shared
+PRE_OBJS_FLAGS  := -Wl,-export-dynamic -Wl,-whole-archive
+POST_OBJS_FLAGS := -Wl,-no-whole-archive
+LIBS            += -ldl
+'
+		;;
+	freebsd*)
+_def_plugin='
+#define PLUGIN_PREFIX	"lib"
+#define PLUGIN_SUFFIX	".so"
+'
+_mak_plugins='
+DYNAMIC_MODULES := 1
+PLUGIN_PREFIX := lib
+PLUGIN_SUFFIX := .so
+PLUGIN_EXTRA_DEPS =
+CXXFLAGS        += -DDYNAMIC_MODULES
+CXXFLAGS        += -fpic
+PLUGIN_LDFLAGS  += -shared
+PRE_OBJS_FLAGS  := -Wl,-export-dynamic -Wl,-whole-archive
+POST_OBJS_FLAGS := -Wl,-no-whole-archive
+'
+		;;
+	darwin*)
+_def_plugin='
+#define PLUGIN_PREFIX	""
+#define PLUGIN_SUFFIX	".plugin"
+'
+_mak_plugins='
+DYNAMIC_MODULES := 1
+PLUGIN_PREFIX :=
+PLUGIN_SUFFIX := .plugin
+PLUGIN_EXTRA_DEPS = $(EXECUTABLE)
+CXXFLAGS        += -DDYNAMIC_MODULES
+PLUGIN_LDFLAGS  += -bundle -bundle_loader $(EXECUTABLE) -exported_symbols_list "$(srcdir)/plugin.exp"
+PRE_OBJS_FLAGS  := -all_load
+POST_OBJS_FLAGS :=
+LIBS            += -ldl
+'
+		;;
+	*mingw32*)
+_def_plugin='
+#define PLUGIN_PREFIX	""
+#define PLUGIN_SUFFIX	".dll"
+'
+_mak_plugins='
+DYNAMIC_MODULES		:= 1
+PLUGIN_PREFIX		:=
+PLUGIN_SUFFIX		:= .dll
+PLUGIN_EXTRA_DEPS	= $(EXECUTABLE)
+CXXFLAGS			+= -DDYNAMIC_MODULES
+PLUGIN_LDFLAGS		:= -Wl,--enable-auto-import -shared ./libscummvm.a
+PRE_OBJS_FLAGS		:= -Wl,--whole-archive
+POST_OBJS_FLAGS		:= -Wl,--export-all-symbols -Wl,--no-whole-archive -Wl,--out-implib,./libscummvm.a
+'
+		;;
+	gp2xwiz*)
+_def_plugin='
+#define PLUGIN_PREFIX	""
+#define PLUGIN_SUFFIX	".plugin"
+'
+_mak_plugins='
+DYNAMIC_MODULES := 1
+PLUGIN_PREFIX := 
+PLUGIN_SUFFIX := .plugin
+PLUGIN_EXTRA_DEPS = $(EXECUTABLE)
+CXXFLAGS        += -DDYNAMIC_MODULES
+CXXFLAGS        += -fpic
+PLUGIN_LDFLAGS  += -shared
+PRE_OBJS_FLAGS  := -Wl,-export-dynamic -Wl,-whole-archive
+POST_OBJS_FLAGS := -Wl,-no-whole-archive
+LIBS            += -ldl
+'
+		;;	
+	dreamcast)
+_def_plugin='
+#define PLUGIN_PREFIX	""
+#define PLUGIN_SUFFIX	".plg"
+'
+_mak_plugins='
+DYNAMIC_MODULES		:= 1
+PLUGIN_PREFIX		:=
+PLUGIN_SUFFIX		:= .plg
+PLUGIN_EXTRA_DEPS	= $(abspath $(srcdir)/backends/platform/dc/plugin.x $(srcdir)/backends/platform/dc/plugin.syms) $(EXECUTABLE)
+CXXFLAGS			+= -DDYNAMIC_MODULES
+PLUGIN_LDFLAGS		= -ml -m4-single-only -nostartfiles -Wl,-q,-T$(srcdir)/backends/platform/dc/plugin.x,--just-symbols,$(EXECUTABLE),--retain-symbols-file,$(srcdir)/backends/platform/dc/plugin.syms -L$(ronindir)/lib
+PRE_OBJS_FLAGS		:= -Wl,--whole-archive
+POST_OBJS_FLAGS		:= -Wl,--no-whole-archive
+'
+		;;
+	*)
+		_dynamic_modules=no
+		_mak_plugins=
+		_def_plugin=
+		;;
+	esac
+	echo "$_dynamic_modules"
+fi
+
+
+#
+# Check whether integrated MT-32 emulator support is requested
+#
+if test "$_mt32emu" = no ; then
+	_def_mt32emu='#undef USE_MT32EMU'
+else
+	_def_mt32emu='#define USE_MT32EMU'
+fi
+add_to_config_mk_if_yes "$_mt32emu" 'USE_MT32EMU = 1'
+
+#
+# Check whether to enable the (hq) scalers
+#
+add_to_config_mk_if_no $_build_hq_scalers   'DISABLE_HQ_SCALERS = 1'
+add_to_config_mk_if_no $_build_scalers      'DISABLE_SCALERS = 1'
+
+#
+# Check whether to compile the Indeo3 decoder
+#
+if test "$_indeo3" = auto ; then
+	# Autodetect. Build if either the gob engine or plugins are enabled
+	if test `get_engine_build gob` = yes || test "$_dynamic_modules" = yes ; then
+		_indeo3="yes"
+	else
+		_indeo3="no"
+	fi
+fi
+if test "$_indeo3" = no ; then
+	_def_indeo3='#undef USE_INDEO3'
+else
+	_def_indeo3='#define USE_INDEO3'
+fi
+add_to_config_mk_if_yes "$_indeo3" 'USE_INDEO3 = 1'
+
+#
+# Check for math lib
+#
+cat > $TMPC << EOF
+int main(void) { return 0; }
+EOF
+cc_check $LDFLAGS $CXXFLAGS -lm && LDFLAGS="$LDFLAGS -lm"
+
+#
+# Check for Ogg Vorbis
+#
+echocheck "Ogg Vorbis"
+if test "$_vorbis" = auto ; then
+	_vorbis=no
+	cat > $TMPC << EOF
+#include <vorbis/codec.h>
+int main(void) { vorbis_packet_blocksize(0,0); return 0; }
+EOF
+	cc_check $LDFLAGS $CXXFLAGS $OGG_CFLAGS $OGG_LIBS $VORBIS_CFLAGS $VORBIS_LIBS \
+		-lvorbisfile -lvorbis -logg && _vorbis=yes
+fi
+if test "$_vorbis" = yes ; then
+	_def_vorbis='#define USE_VORBIS'
+	LIBS="$LIBS $OGG_LIBS $VORBIS_LIBS -lvorbisfile -lvorbis -logg"
+	INCLUDES="$INCLUDES $OGG_CFLAGS $VORBIS_CFLAGS"
+else
+	_def_vorbis='#undef USE_VORBIS'
+fi
+add_to_config_mk_if_yes "$_vorbis" 'USE_VORBIS = 1'
+echo "$_vorbis"
+
+#
+# Check for Tremor
+#
+echocheck "Tremor"
+if test "$_tremor" = auto ; then
+	_tremor=no
+	cat > $TMPC << EOF
+#include <tremor/ivorbiscodec.h>
+int main(void) { vorbis_info_init(0); return 0; }
+EOF
+	cc_check $LDFLAGS $CXXFLAGS $TREMOR_CFLAGS $TREMOR_LIBS -lvorbisidec && \
+	_tremor=yes
+fi
+if test "$_tremor" = yes && test "$_vorbis" = no; then
+	_def_tremor='#define USE_TREMOR'
+	_def_vorbis='#define USE_VORBIS'
+	LIBS="$LIBS $TREMOR_LIBS -lvorbisidec"
+	INCLUDES="$INCLUDES $TREMOR_CFLAGS"
+else
+	if test "$_vorbis" = yes; then
+		_tremor="no (Ogg Vorbis/Tremor support is mutually exclusive)"
+	fi
+	_def_tremor='#undef USE_TREMOR'
+fi
+add_to_config_mk_if_yes "$_tremor" 'USE_TREMOR = 1'
+echo "$_tremor"
+
+#
+# Check for FLAC
+#
+echocheck "FLAC >= 1.0.1"
+if test "$_flac" = auto ; then
+	_flac=no
+	cat > $TMPC << EOF
+#include <FLAC/format.h>
+int main(void) { return FLAC__STREAM_SYNC_LEN >> 30; /* guaranteed to be 0 */ }
+EOF
+	if test "$_vorbis" = yes ; then
+		cc_check $LDFLAGS $CXXFLAGS $FLAC_CFLAGS $FLAC_LIBS $OGG_CFLAGS $OGG_LIBS \
+			-lFLAC -logg && _flac=yes
+	else
+		cc_check $LDFLAGS $CXXFLAGS $FLAC_CFLAGS $FLAC_LIBS \
+			-lFLAC && _flac=yes
+	fi
+fi
+if test "$_flac" = yes ; then
+	_def_flac='#define USE_FLAC'
+	if test "$_vorbis" = yes ; then
+		LIBS="$LIBS $FLAC_LIBS $OGG_LIBS -lFLAC -logg"
+	else
+		LIBS="$LIBS $FLAC_LIBS -lFLAC"
+	fi
+	INCLUDES="$INCLUDES $FLAC_CFLAGS"
+else
+	_def_flac='#undef USE_FLAC'
+fi
+add_to_config_mk_if_yes "$_flac" 'USE_FLAC = 1'
+echo "$_flac"
+
+#
+# Check for MAD (MP3 library)
+#
+echocheck "MAD"
+if test "$_mad" = auto ; then
+	_mad=no
+	cat > $TMPC << EOF
+#include <mad.h>
+int main(void) { return 0; }
+EOF
+	cc_check $LDFLAGS $CXXFLAGS $MAD_CFLAGS $MAD_LIBS -lmad && _mad=yes
+fi
+if test "$_mad" = yes ; then
+	_def_mad='#define USE_MAD'
+	LIBS="$LIBS $MAD_LIBS -lmad"
+	INCLUDES="$INCLUDES $MAD_CFLAGS"
+else
+	_def_mad='#undef USE_MAD'
+fi
+add_to_config_mk_if_yes "$_mad" 'USE_MAD = 1'
+echo "$_mad"
+
+#
+# Check for ALSA
+#
+echocheck "ALSA >= 0.9"
+if test "$_alsa" = auto ; then
+	_alsa=no
+	cat > $TMPC << EOF
+#include <alsa/asoundlib.h>
+int main(void) { return (!(SND_LIB_MAJOR==0 && SND_LIB_MINOR==9)); }
+EOF
+	cc_check $LDFLAGS $CXXFLAGS $ALSA_CFLAGS $ALSA_LIBS -lasound && _alsa=yes
+fi
+if test "$_alsa" = yes ; then
+	_def_alsa='#define USE_ALSA'
+	LIBS="$LIBS $ALSA_LIBS -lasound"
+	INCLUDES="$INCLUDES $ALSA_CFLAGS"
+else
+	_def_alsa='#undef USE_ALSA'
+fi
+echo "$_alsa"
+
+#
+# Check for ZLib
+#
+echocheck "zlib"
+if test "$_zlib" = auto ; then
+	_zlib=no
+	cat > $TMPC << EOF
+#include <string.h>
+#include <zlib.h>
+int main(void) { return strcmp(ZLIB_VERSION, zlibVersion()); }
+EOF
+	cc_check $LDFLAGS $CXXFLAGS $ZLIB_CFLAGS $ZLIB_LIBS -lz && _zlib=yes
+fi
+if test "$_zlib" = yes ; then
+	_def_zlib='#define USE_ZLIB'
+	LIBS="$LIBS $ZLIB_LIBS -lz"
+	INCLUDES="$INCLUDES $ZLIB_CFLAGS"
+else
+	_def_zlib='#undef USE_ZLIB'
+fi
+add_to_config_mk_if_yes "$_zlib" 'USE_ZLIB = 1'
+echo "$_zlib"
+
+#
+# Check for LibMPEG2
+#
+echocheck "libmpeg2 >= 0.3.2"
+if test "$_mpeg2" = auto ; then
+	_mpeg2=no
+	cat > $TMPC << EOF
+typedef signed $type_1_byte int8_t;
+typedef signed $type_2_byte int16_t;
+typedef signed $type_4_byte int32_t;
+
+typedef unsigned $type_1_byte uint8_t;
+typedef unsigned $type_2_byte uint16_t;
+typedef unsigned $type_4_byte uint32_t;
+
+#include <mpeg2dec/mpeg2.h>
+int main(void) {
+	/* mpeg2_state_t first appears in 0.4.0 */
+	mpeg2_state_t state;
+
+		#ifdef MPEG2_RELEASE
+		if (MPEG2_RELEASE >= MPEG2_VERSION(0, 3, 2))
+			return 0;
+	#endif
+	return 1;
+}
+EOF
+
+	if test -n "$_host"; then
+		# don't execute while cross compiling
+		cc_check $LDFLAGS $CXXFLAGS $MPEG2_CFLAGS $MPEG2_LIBS -lmpeg2 && _mpeg2=yes
+	else
+		cc_check $LDFLAGS $CXXFLAGS $MPEG2_CFLAGS $MPEG2_LIBS -lmpeg2 && $TMPO$HOSTEXEEXT && _mpeg2=yes
+	fi
+fi
+if test "$_mpeg2" = yes ; then
+	_def_mpeg2='#define USE_MPEG2'
+	INCLUDES="$INCLUDES $MPEG2_CFLAGS"
+	LIBS="$LIBS $MPEG2_LIBS -lmpeg2"
+else
+	_def_mpeg2='#undef USE_MPEG2'
+fi
+add_to_config_mk_if_yes "$_mpeg2" 'USE_MPEG2 = 1'
+echo "$_mpeg2"
+
+#
+# Check for libfluidsynth
+#
+echocheck "libfluidsynth"
+if test "$_fluidsynth" = auto ; then
+	_fluidsynth=no
+	cat > $TMPC << EOF
+#include <fluidsynth.h>
+int main(void) { return 0; }
+EOF
+	cc_check $LDFLAGS $CXXFLAGS $FLUIDSYNTH_CFLAGS $FLUIDSYNTH_LIBS -lfluidsynth && _fluidsynth=yes
+fi
+if test "$_fluidsynth" = yes ; then
+	_def_fluidsynth='#define USE_FLUIDSYNTH'
+	case $_host_os in
+		mingw*)
+			LIBS="$LIBS $FLUIDSYNTH_LIBS -lfluidsynth -ldsound -lwinmm"
+		;;
+		*)
+			LIBS="$LIBS $FLUIDSYNTH_LIBS -lfluidsynth"
+		;;
+	esac
+	INCLUDES="$INCLUDES $FLUIDSYNTH_CFLAGS"
+else
+	_def_fluidsynth='#undef USE_FLUIDSYNTH'
+fi
+echo "$_fluidsynth"
+rm -rf $TMPC $TMPO$HOSTEXEEXT $TMPO.dSYM
+
+#
+# Check for nasm
+#
+if test "$_have_x86" = yes ; then
+	echocheck "nasm"
+	if test "$_nasm" = no ; then
+		echo "disabled"
+	else
+		IFS="${IFS= 	}"; ac_save_ifs="$IFS"; IFS=$SEPARATOR
+
+		for path_dir in $_nasmpath; do
+			if test -x "$path_dir/nasm$NATIVEEXEEXT" ; then
+				NASM="$path_dir/nasm$NATIVEEXEEXT"
+				echo $NASM
+				break
+			fi
+		done
+
+		IFS="$ac_save_ifs"
+
+		if test x$NASM = x -o x$NASM = x'"$NASM"'; then
+			echo "not found"
+			_nasm=no
+		else
+			case $_host_os in
+				os2-emx*)
+					NASMFLAGS="-f aout"
+				;;
+				mingw*)
+					NASMFLAGS="-f win32"
+				;;
+				darwin*)
+					NASMFLAGS="-f macho"
+				;;
+				*)
+					NASMFLAGS="-f elf"
+				;;
+			esac
+			_nasm=yes
+		fi
+	fi
+fi
+
+add_to_config_h_if_yes $_nasm '#define USE_NASM'
+add_to_config_mk_if_yes $_nasm 'HAVE_NASM = 1'
+
+#
+# Enable vkeybd / keymapper
+#
+if test "$_vkeybd" = yes ; then
+	DEFINES="$DEFINES -DENABLE_VKEYBD"
+fi
+if test "$_keymapper" = yes ; then
+	DEFINES="$DEFINES -DENABLE_KEYMAPPER"
+fi
+
+#
+# Figure out installation directories
+#
+test -z "$_bindir" && _bindir="$_prefix/bin"
+test -z "$_mandir" && _mandir="$_prefix/share/man"
+test -z "$_datadir" && _datadir="$_prefix/share"
+test -z "$_libdir" && _libdir="$_prefix/lib"
+
+DEFINES="$DEFINES -DDATA_PATH=\\\"$_datadir/scummvm\\\""
+DEFINES="$DEFINES -DPLUGIN_DIRECTORY=\\\"$_libdir/scummvm\\\""
+
+
+echo_n "Backend... "
+echo_n "$_backend"
+
+if test "$_nasm" = yes ; then
+	echo_n ", assembly routines"
+fi
+
+if test "$_build_hq_scalers" = yes ; then
+	echo_n ", HQ scalers"
+fi
+
+if test "$_mt32emu" = yes ; then
+	echo_n ", MT-32 emu"
+fi
+
+if test "$_indeo3" = yes ; then
+	echo_n ", Indeo3 decoder"
+fi
+
+if test "$_vkeybd" = yes ; then
+	echo_n ", virtual keyboard"
+fi
+
+if test "$_keymapper" = yes ; then
+	echo ", keymapper"
+else
+	echo
+fi
+
+#
+# Backend related stuff
+#
+case $_backend in
+	null)
+		DEFINES="$DEFINES -DUSE_NULL_DRIVER"
+		;;
+	sdl)
+		find_sdlconfig
+		INCLUDES="$INCLUDES `$_sdlconfig --prefix="$_sdlpath" --cflags`"
+		LIBS="$LIBS `$_sdlconfig --prefix="$_sdlpath" --libs`"
+		DEFINES="$DEFINES -DSDL_BACKEND"
+		;;
+	linuxmoto)
+		find_sdlconfig
+		INCLUDES="$INCLUDES `$_sdlconfig --prefix="$_sdlpath" --cflags`"
+		LIBS="$LIBS `$_sdlconfig --prefix="$_sdlpath" --libs`"
+		DEFINES="$DEFINES -DSDL_BACKEND -DLINUXMOTO"
+		;;
+	gp2x)
+		find_sdlconfig
+		INCLUDES="$INCLUDES `$_sdlconfig --prefix="$_sdlpath" --cflags`"
+		LIBS="$LIBS `$_sdlconfig --prefix="$_sdlpath" --libs`"
+		LDFLAGS="$LDFLAGS -static"
+		CXXFLAGS="$CXXFLAGS -march=armv4t"
+		;;
+	gp2xwiz)
+		find_sdlconfig
+		INCLUDES="$INCLUDES `$_sdlconfig --prefix="$_sdlpath" --cflags`"
+		LIBS="$LIBS `$_sdlconfig --prefix="$_sdlpath" --libs`"
+		LDFLAGS="$LDFLAGS"
+		CXXFLAGS="$CXXFLAGS -mcpu=arm926ej-s -mtune=arm926ej-s"
+		;;		
+	iphone)
+		OBJCFLAGS="$OBJCFLAGS --std=c99"
+		LIBS="$LIBS -lobjc -framework UIKit -framework CoreGraphics -framework OpenGLES -framework QuartzCore -framework GraphicsServices -framework CoreFoundation -framework Foundation -framework AudioToolbox -framework CoreAudio"
+		;;
+	wince)
+		INCLUDES="$INCLUDES "'-I$(srcdir) -I$(srcdir)/backends/platform/wince -I$(srcdir)/engines -I$(srcdir)/backends/platform/wince/missing/gcc -I$(srcdir)/backends/platform/wince/CEgui -I$(srcdir)/backends/platform/wince/CEkeys'
+		LIBS="$LIBS -static -lSDL"
+		;;
+	dc)
+		INCLUDES="$INCLUDES "'-I$(srcdir)/backends/platform/dc -isystem $(ronindir)/include'
+		LDFLAGS="$LDFLAGS -Wl,-Ttext,0x8c010000 -nostartfiles "'$(ronindir)/lib/crt0.o -L$(ronindir)/lib'
+		LIBS="$LIBS -lronin-noserial -lm"
+		;;
+	wii)
+		DEFINES="$DEFINES -D__WII__ -DGEKKO"
+		case $_host_os in
+		gamecube)
+			LIBS="$LIBS -lfat -logc -ldb"
+			;;
+		*)
+			LIBS="$LIBS -ldi -lfat -lwiiuse -lbte -logc -lwiikeyboard -ldb"
+			;;
+		esac
+		;;
+	psp)
+		DEFINES="$DEFINES -D__PSP__ -DDISABLE_TEXT_CONSOLE -DDISABLE_COMMAND_LINE -DDISABLE_DOSBOX_OPL"
+		INCLUDES="$INCLUDES -I$PSPDEV/psp/include/SDL"
+		LIBS="$LIBS -lSDL"
+		;;
+	*)
+		echo "support for $_backend backend not implemented in configure script yet"
+		exit 1
+		;;
+esac
+MODULES="$MODULES backends/platform/$_backend"
+
+#
+# Do CXXFLAGS now we know the compiler version
+#
+if test "$_cxx_major" -ge "3" ; then
+	case $_host_os in
+	# newlib-based system include files suppress non-C89 function 
+	# declarations under __STRICT_ANSI__
+	mingw* | dreamcast | wii | gamecube | psp | wince | amigaos*)
+		CXXFLAGS="$CXXFLAGS -W -Wno-unused-parameter"
+		;;
+	*)
+		CXXFLAGS="$CXXFLAGS -ansi -W -Wno-unused-parameter"
+		;;
+	esac
+	add_line_to_config_mk 'HAVE_GCC3 = 1'
+fi;
+
+if test "$_cxx_major" -ge "4" && test "$_cxx_minor" -ge "3" ; then
+	CXXFLAGS="$CXXFLAGS -Wno-empty-body"
+else
+	CXXFLAGS="$CXXFLAGS -Wconversion"
+fi;
+
+# Some platforms use certain GNU extensions in header files
+case $_host_os in
+wii | gamecube | psp)
+	;;
+*)
+	CXXFLAGS="$CXXFLAGS -pedantic"
+	;;
+esac
+
+#
+# Engine selection
+#
+_engines_built_static=""
+_engines_built_dynamic=""
+_engines_skipped=""
+
+for engine in $_engines; do
+	if test "`get_engine_sub $engine`" = "no" ; then
+		# It's a main engine
+		if test `get_engine_build $engine` = no ; then
+			isbuilt=no
+		else
+			# If dynamic plugins aren't supported, mark
+			# all the engines as static
+			if test $_dynamic_modules = no ; then
+				eval _engine_${engine}_build=static
+			else
+				# If it wasn't explicitly marked as static or
+				# dynamic, use the configured default
+				if test `get_engine_build $engine` = yes ; then
+					eval _engine_${engine}_build=${_plugins_default}
+				fi
+			fi
+
+			# Prepare the defines
+			if test `get_engine_build $engine` = dynamic ; then
+				isbuilt=DYNAMIC_PLUGIN
+			else
+				eval _engine_${engine}_build=static
+				isbuilt=STATIC_PLUGIN
+			fi
+		fi
+
+		# Prepare the information to be shown
+		prepare_engine_build_strings $engine
+	else
+		# It's a subengine, just say yes or no
+		if test "`get_engine_build $engine`" = "no" ; then
+			isbuilt=no
+		else
+			isbuilt=1
+		fi
+	fi
+
+	# Save the settings
+	defname="ENABLE_`echo $engine | tr '[a-z]' '[A-Z]'`"
+	if test "$isbuilt" = "no" ; then
+		add_line_to_config_mk "# $defname"
+	else
+		add_line_to_config_mk "$defname = $isbuilt"
+	fi
+done
+
+#
+# Show which engines ("frontends") are to be built
+#
+echo
+if test -n "$_engines_built_static" ; then
+	echo "Engines (builtin):"
+	echo $_engines_built_static | sed 's/@/\
+/g
+s/#/    /g'
+fi
+
+if test -n "$_engines_built_dynamic" ; then
+	echo "Engines (plugins):"
+	echo $_engines_built_dynamic | sed 's/@/\
+/g
+s/#/    /g'
+fi
+
+if test -n "$_engines_skipped" ; then
+	echo "Engines Skipped:"
+	echo $_engines_skipped | sed 's/@/\
+/g
+s/#/    /g'
+fi
+
+
+echo
+echo "Creating config.h"
+cat > config.h << EOF
+/* This file is automatically generated by configure */
+/* DO NOT EDIT MANUALLY */
+
+#ifndef CONFIG_H
+#define CONFIG_H
+
+$_config_h_data
+
+/* Data types */
+typedef unsigned $type_1_byte byte;
+typedef unsigned int uint;
+typedef unsigned $type_1_byte uint8;
+typedef unsigned $type_2_byte uint16;
+typedef unsigned $type_4_byte uint32;
+typedef signed $type_1_byte int8;
+typedef signed $type_2_byte int16;
+typedef signed $type_4_byte int32;
+
+/* Libs */
+$_def_vorbis
+$_def_tremor
+$_def_flac
+$_def_mad
+$_def_alsa
+$_def_zlib
+$_def_mpeg2
+$_def_fluidsynth
+$_def_mt32emu
+$_def_indeo3
+
+/* Plugin settings */
+$_def_plugin
+
+#endif /* CONFIG_H */
+EOF
+
+echo "Creating config.mk"
+cat > config.mk << EOF
+# -------- Generated by configure -----------
+
+CXX := $CXX
+CXXFLAGS := $CXXFLAGS
+LIBS += $LIBS
+RANLIB := $_ranlib
+STRIP := $_strip
+AR := $_ar
+AS := $_as
+ASFLAGS := $ASFLAGS
+WINDRES := $_windres
+WIN32PATH=$_win32path
+AOS4PATH=$_aos4path
+STATICLIBPATH=$_staticlibpath
+
+BACKEND := $_backend
+MODULES += $MODULES
+MODULE_DIRS += $MODULE_DIRS
+EXEEXT := $HOSTEXEEXT
+NASM := $NASM
+NASMFLAGS := $NASMFLAGS
+
+PREFIX := $_prefix
+BINDIR := $_bindir
+MANDIR := $_mandir
+DATADIR := $_datadir
+LIBDIR := $_libdir
+
+$_config_mk_data
+
+INCLUDES += $INCLUDES
+OBJS += $OBJS
+DEFINES += $DEFINES
+LDFLAGS += $LDFLAGS
+
+$_mak_plugins
+
+SAVED_CONFIGFLAGS := $SAVED_CONFIGFLAGS
+SAVED_LDFLAGS     := $SAVED_LDFLAGS
+SAVED_CXX         := $SAVED_CXX
+SAVED_CXXFLAGS    := $SAVED_CXXFLAGS
+SAVED_CPPFLAGS    := $SAVED_CPPFLAGS
+SAVED_ASFLAGS     := $SAVED_ASFLAGS
+EOF
+
+#
+# Create a custom Makefile when building outside the source tree
+# TODO: Add a better check than just looking for 'Makefile'
+#
+if test ! -f Makefile ; then
+echo "Creating Makefile"
+
+cat > Makefile << EOF
+# -------- Generated by configure -----------
+srcdir = $_srcdir
+vpath %.h \$(srcdir)
+vpath %.cpp \$(srcdir)
+vpath %.c \$(srcdir)
+vpath %.m \$(srcdir)
+vpath %.asm \$(srcdir)
+vpath %.s \$(srcdir)
+vpath %.S \$(srcdir)
+include \$(srcdir)/Makefile
+EOF
+
+fi

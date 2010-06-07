@@ -1,0 +1,76 @@
+Configure run on Thu Mar 4 10:50:03 CET 2010
+
+#include <stdlib.h>
+#include <signal.h>
+int main(int argc, char **argv) {
+	unsigned char test[8] = { 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88 };
+	signal(SIGBUS, exit);
+	signal(SIGABRT, exit);
+	signal(SIGSEGV, exit);
+	if (*((unsigned int *)(test + 1)) != 0x55443322 && *((unsigned int *)(test + 1)) != 0x22334455) {
+		return 1;
+	}
+	return 0;
+}
+
+g++ /tmp/scummvm-conf.FgjYjUrSDU.cpp -o /tmp/scummvm-conf.FgjYjUrSDU 
+
+
+int main(void) { return 0; }
+
+g++ /tmp/scummvm-conf.FgjYjUrSDU.cpp -o /tmp/scummvm-conf.FgjYjUrSDU -g -lm
+
+
+#include <vorbis/codec.h>
+int main(void) { vorbis_packet_blocksize(0,0); return 0; }
+
+g++ /tmp/scummvm-conf.FgjYjUrSDU.cpp -o /tmp/scummvm-conf.FgjYjUrSDU -lm -g -lvorbisfile -lvorbis -logg
+/tmp/scummvm-conf.FgjYjUrSDU.cpp:1:26: error: vorbis/codec.h: No such file or directory
+/tmp/scummvm-conf.FgjYjUrSDU.cpp: In function ‘int main()’:
+/tmp/scummvm-conf.FgjYjUrSDU.cpp:2: error: ‘vorbis_packet_blocksize’ was not declared in this scope
+
+
+#include <tremor/ivorbiscodec.h>
+int main(void) { vorbis_info_init(0); return 0; }
+
+g++ /tmp/scummvm-conf.FgjYjUrSDU.cpp -o /tmp/scummvm-conf.FgjYjUrSDU -lm -g -lvorbisidec
+/tmp/scummvm-conf.FgjYjUrSDU.cpp:1:33: error: tremor/ivorbiscodec.h: No such file or directory
+/tmp/scummvm-conf.FgjYjUrSDU.cpp: In function ‘int main()’:
+/tmp/scummvm-conf.FgjYjUrSDU.cpp:2: error: ‘vorbis_info_init’ was not declared in this scope
+
+
+#include <FLAC/format.h>
+int main(void) { return FLAC__STREAM_SYNC_LEN >> 30; /* guaranteed to be 0 */ }
+
+g++ /tmp/scummvm-conf.FgjYjUrSDU.cpp -o /tmp/scummvm-conf.FgjYjUrSDU -lm -g -lFLAC
+/tmp/scummvm-conf.FgjYjUrSDU.cpp:1:25: error: FLAC/format.h: No such file or directory
+/tmp/scummvm-conf.FgjYjUrSDU.cpp: In function ‘int main()’:
+/tmp/scummvm-conf.FgjYjUrSDU.cpp:2: error: ‘FLAC__STREAM_SYNC_LEN’ was not declared in this scope
+
+
+#include <mad.h>
+int main(void) { return 0; }
+
+g++ /tmp/scummvm-conf.FgjYjUrSDU.cpp -o /tmp/scummvm-conf.FgjYjUrSDU -lm -g -lmad
+/tmp/scummvm-conf.FgjYjUrSDU.cpp:1:17: error: mad.h: No such file or directory
+
+
+#include <alsa/asoundlib.h>
+int main(void) { return (!(SND_LIB_MAJOR==0 && SND_LIB_MINOR==9)); }
+
+g++ /tmp/scummvm-conf.FgjYjUrSDU.cpp -o /tmp/scummvm-conf.FgjYjUrSDU -lm -g -lasound
+
+
+#include <string.h>
+#include <zlib.h>
+int main(void) { return strcmp(ZLIB_VERSION, zlibVersion()); }
+
+g++ /tmp/scummvm-conf.FgjYjUrSDU.cpp -o /tmp/scummvm-conf.FgjYjUrSDU -lm -g -lz
+
+
+#include <fluidsynth.h>
+int main(void) { return 0; }
+
+g++ /tmp/scummvm-conf.FgjYjUrSDU.cpp -o /tmp/scummvm-conf.FgjYjUrSDU -lm -g -lfluidsynth
+/tmp/scummvm-conf.FgjYjUrSDU.cpp:1:24: error: fluidsynth.h: No such file or directory
+

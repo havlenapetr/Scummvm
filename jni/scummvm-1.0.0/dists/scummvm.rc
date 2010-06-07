@@ -1,0 +1,41 @@
+#include "winresrc.h"
+
+#if defined (__MINGW32__) || defined(__CYGWIN32__)
+IDI_ICON               ICON    DISCARDABLE     "icons/scummvm.ico"
+#else
+IDI_ICON               ICON    DISCARDABLE     "../../icons/scummvm.ico"
+#endif
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 1,0,0,0
+ PRODUCTVERSION 1,0,0,0
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS 0x1L
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS 0x40004L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "Comments", "Look! A three headed monkey (TM)! .. Nice use of the TM!\0"
+            VALUE "FileDescription", "http://www.scummvm.org/\0"
+            VALUE "FileVersion", "1.0.0\0"
+            VALUE "InternalName", "scummvm\0"
+            VALUE "LegalCopyright", "Copyright © 2001-2009 The ScummVM Team\0"
+            VALUE "LegalTrademarks", "'SCUMM', and all SCUMM games are a TM of LucasArts. Simon The Sorcerer is a TM of AdventureSoft. Beneath a Steel Sky and Broken Sword are a TM of Revolution. Flight of the Amazon Queen is a TM of John Passfield and Steve Stamatiadis. \0"
+            VALUE "OriginalFilename", "scummvm.exe\0"
+            VALUE "ProductName", "ScummVM\0"
+            VALUE "ProductVersion", "1.0.0\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
