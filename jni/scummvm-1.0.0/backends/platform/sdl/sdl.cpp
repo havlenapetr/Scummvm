@@ -461,8 +461,8 @@ bool OSystem_SDL::getFeatureState(Feature f) {
 
 void OSystem_SDL::quit() {
 	if (_cdrom) {
-		SDL_CDStop(_cdrom);
-		SDL_CDClose(_cdrom);
+		//SDL_CDStop(_cdrom);
+		//SDL_CDClose(_cdrom);
 	}
 	unloadGFXMode();
 	deleteMutex(_graphicsMutex);
@@ -788,6 +788,7 @@ void OSystem_SDL::playCD(int track, int num_loops, int start_frame, int duration
 		SDL_CDPlayTracks(_cdrom, track, 0, 1, 0);
 	else
 		SDL_CDPlayTracks(_cdrom, track, start_frame, 0, duration);
+
 	_cdDuration = duration;
 	_cdStopTime = 0;
 	_cdEndTime = SDL_GetTicks() + _cdrom->track[track].length * 1000 / CD_FPS;

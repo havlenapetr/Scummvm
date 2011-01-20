@@ -2,7 +2,7 @@ LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_CFLAGS := -DHAVE_CONFIG_H -DUNIX -DANDROID -DDYNAMIC_MODULES \
-		-DSDL_BACKEND -DENABLE_SCUMM=STATIC_PLUGIN -DENABLE_SCUMM_7_8 \
+                -DSDL_BACKEND -DENABLE_SCUMM=STATIC_PLUGIN -DENABLE_SCUMM_7_8 \
 		-DENABLE_SWORD1=STATIC_PLUGIN -DENABLE_KYRA=DYNAMIC_PLUGIN
 
 BASE := base/*.cpp 
@@ -77,12 +77,17 @@ SRCS := $(BASE) $(COMMON) $(GUI) $(GRAPHICS) $(BACKENDS) $(ENGINES) $(SOUND)
 # Note this simple makefile var substitution, you can find even simpler examples in different Android projects
 LOCAL_SRC_FILES = $(foreach F, $(SRCS), $(addprefix $(dir $(F)),$(notdir $(wildcard $(LOCAL_PATH)/$(F)))))
 
-LOCAL_MODULE := scummvm
-
+#include sdl includes
 LOCAL_C_INCLUDES := \
-	$(LOCAL_PATH)/engines \
-	$(SYSROOT)/usr/include/sdl
+    $(LOCAL_PATH)/../sdl/libs/sdl_1.2.0/include
 
-LOCAL_LDLIBS := -ldl -llog -lsdl -lz
+LOCAL_MODULE := libscummvm
+
+LOCAL_C_INCLUDES  += \
+	$(LOCAL_PATH)/engines
+
+LOCAL_LDLIBS := -ldl -llog -lz
+
+LOCAL_SHARED_LIBRARIES := libsdl
 
 include $(BUILD_SHARED_LIBRARY)
