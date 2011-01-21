@@ -1,0 +1,3 @@
+[submodule "jni/sdl"]
+	path = jni/sdl
+	url = git@github.com:havlenapetr/Scummvm.git
