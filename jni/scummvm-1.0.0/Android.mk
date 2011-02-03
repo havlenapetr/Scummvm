@@ -79,7 +79,7 @@ LOCAL_SRC_FILES = $(foreach F, $(SRCS), $(addprefix $(dir $(F)),$(notdir $(wildc
 
 #include sdl includes
 LOCAL_C_INCLUDES := \
-    $(LOCAL_PATH)/../sdl/libs/sdl_1.2.0/include
+    $(LOCAL_PATH)/../sdl/include
 
 LOCAL_MODULE := libscummvm
 
